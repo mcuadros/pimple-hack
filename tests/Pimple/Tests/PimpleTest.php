@@ -1,9 +1,10 @@
-<?php
+<?hh
 
 /*
  * This file is part of Pimple.
  *
  * Copyright (c) 2009 Fabien Potencier
+ * Copyright (c) 2014 Máximo Cuadros
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -260,7 +261,7 @@ class PimpleTest extends \PHPUnit_Framework_TestCase
         $pimple['foo'] = 123;
         $pimple['bar'] = 123;
 
-        $this->assertEquals(array('foo', 'bar'), $pimple->keys());
+        $this->assertEquals(Vector{'foo', 'bar'}, $pimple->keys());
     }
 
     /** @test */
@@ -284,28 +285,6 @@ class PimpleTest extends \PHPUnit_Framework_TestCase
     /**
      * @dataProvider badServiceDefinitionProvider
      * @expectedException InvalidArgumentException
-     * @expectedExceptionMessage Service definition is not a Closure or invokable object.
-     */
-    public function testFactoryFailsForInvalidServiceDefinitions($service)
-    {
-        $pimple = new Pimple();
-        $pimple->factory($service);
-    }
-
-    /**
-     * @dataProvider badServiceDefinitionProvider
-     * @expectedException InvalidArgumentException
-     * @expectedExceptionMessage Callable is not a Closure or invokable object.
-     */
-    public function testProtectFailsForInvalidServiceDefinitions($service)
-    {
-        $pimple = new Pimple();
-        $pimple->protect($service);
-    }
-
-    /**
-     * @dataProvider badServiceDefinitionProvider
-     * @expectedException InvalidArgumentException
      * @expectedExceptionMessage Identifier "foo" does not contain an object definition.
      */
     public function testExtendFailsForKeysNotContainingServiceDefinitions($service)
@@ -313,18 +292,6 @@ class PimpleTest extends \PHPUnit_Framework_TestCase
         $pimple = new Pimple();
         $pimple['foo'] = $service;
         $pimple->extend('foo', function () {});
-    }
-
-    /**
-     * @dataProvider badServiceDefinitionProvider
-     * @expectedException InvalidArgumentException
-     * @expectedExceptionMessage Extension service definition is not a Closure or invokable object.
-     */
-    public function testExtendFailsForInvalidServiceDefinitions($service)
-    {
-        $pimple = new Pimple();
-        $pimple['foo'] = function () {};
-        $pimple->extend('foo', $service);
     }
 
     /**
