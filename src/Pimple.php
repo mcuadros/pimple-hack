@@ -1,13 +1,44 @@
 <?hh // decl
 
+/*
+ * This file is part of Pimple.
+ *
+ * Copyright (c) 2009 Fabien Potencier
+ * Copyright (c) 2014 Máximo Cuadros
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is furnished
+ * to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
+/**
+ * Pimple main class.
+ *
+ * @package pimple
+ * @author  Fabien Potencier
+ */
 class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
 {
     private Set<closure> $factories = Set {};
     private Set<closure> $protected = Set {};
     private Set<string> $frozen = Set {};
+    private Set<string> $keys = Set {};
     private Map<string, mixed> $values = Map {};
     private Map<string, closure> $closures = Map {};
-    private Map<string, mixed> $keys = Map {};
 
     /**
      * Instantiate the container.
@@ -43,12 +74,12 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
         }
 
         if (is_object($value) && is_callable($value, '__invoke')) {
-            $this->closures[$id] = $value;
+            $this->closures->add(Pair<string, mixed> {$id, $value});
         } else {
-            $this->values[$id] = $value;
+            $this->values->add(Pair<string, mixed> {$id, $value});
         }
 
-        $this->keys[$id] = true;
+        $this->keys->add($id);
     }
 
     /**
@@ -62,26 +93,27 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      */
     public function offsetGet(Tk $id)
     {
-        if (!$this->keys->containsKey($id)) {
+        if (!$this->keys->contains($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
         }
 
         if ($this->values->containsKey($id)) {
-            return $this->values[$id];
+           return $this->values->get($id);
         }
 
-        $closure = $this->closures[$id];
+        $closure = $this->closures->get($id);
         if ($this->protected->contains(spl_object_hash($closure))) {
             return $closure;
         }
 
-        if ($this->factories->contains(spl_object_hash($closure))) {
-            return $closure($this);
+
+        $value = $closure->__invoke($this);
+        if (!$this->factories->contains(spl_object_hash($closure))) {
+            $this->frozen->add($id);
+            $this->values->add(Pair<string, mixed> {$id, $value});
         }
 
-        $this->frozen->add($id);
-
-        return $this->values[$id] = $closure->__invoke($this);
+        return $value;
     }
 
     /**
@@ -93,7 +125,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      */
     public function offsetExists(Tk $id): bool
     {
-        return $this->keys->containsKey($id);
+        return $this->keys->contains($id);
     }
 
     /**
@@ -103,7 +135,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      */
     public function offsetUnset(Tk $id): this
     {
-        if (!$this->keys->containsKey($id)) {
+        if (!$this->keys->contains($id)) {
             return;
         }
 
@@ -114,10 +146,10 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
             $this->protected->remove($hash);
         }
 
-        $this->frozen->remove($id);
         $this->closures->removeKey($id);
         $this->values->removeKey($id);
-        $this->keys->removeKey($id);
+        $this->frozen->remove($id);
+        $this->keys->remove($id);
     }
 
     /**
@@ -165,7 +197,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      */
     public function raw(string $id)
     {
-        if (!$this->keys->containsKey($id)) {
+        if (!$this->keys->contains($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
         }
 
@@ -187,16 +219,12 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      */
     public function extend(string $id, Callable $callable): Callable
     {
-        if (!$this->keys->containsKey($id)) {
+        if (!$this->keys->contains($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
         }
 
         if (!$this->closures->containsKey($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" does not contain an object definition.', $id));
-        }
-
-        if (!is_object($callable) || !method_exists($callable, '__invoke')) {
-            throw new InvalidArgumentException('Extension service definition is not a Closure or invokable object.');
         }
 
         $factory = $this->closures->get($id);
