@@ -1,43 +1,13 @@
-<?php
+<?hh // decl
 
-/*
- * This file is part of Pimple.
- *
- * Copyright (c) 2009 Fabien Potencier
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is furnished
- * to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- */
-
-/**
- * Pimple main class.
- *
- * @package pimple
- * @author  Fabien Potencier
- */
-class Pimple implements ArrayAccess
+class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
 {
-    private $values = array();
-    private $factories;
-    private $protected;
-    private $frozen = array();
-    private $raw = array();
-    private $keys = array();
+    private Set<closure> $factories = Set {};
+    private Set<closure> $protected = Set {};
+    private Set<string> $frozen = Set {};
+    private Map<string, mixed> $values = Map {};
+    private Map<string, closure> $closures = Map {};
+    private Map<string, mixed> $keys = Map {};
 
     /**
      * Instantiate the container.
@@ -46,11 +16,8 @@ class Pimple implements ArrayAccess
      *
      * @param array $values The parameters or objects.
      */
-    public function __construct(array $values = array())
+    public function __construct(array $values = [])
     {
-        $this->factories = new \SplObjectStorage();
-        $this->protected = new \SplObjectStorage();
-
         foreach ($values as $key => $value) {
             $this->offsetSet($key, $value);
         }
@@ -69,13 +36,18 @@ class Pimple implements ArrayAccess
      * @param  mixed            $value The value of the parameter or a closure to define an object
      * @throws RuntimeException Prevent override of a frozen service
      */
-    public function offsetSet($id, $value)
+    public function offsetSet(Tk $id, Tv $value)
     {
-        if (isset($this->frozen[$id])) {
+        if ($this->frozen->contains($id)) {
             throw new RuntimeException(sprintf('Cannot override frozen service "%s".', $id));
         }
 
-        $this->values[$id] = $value;
+        if (is_object($value) && is_callable($value, '__invoke')) {
+            $this->closures[$id] = $value;
+        } else {
+            $this->values[$id] = $value;
+        }
+
         $this->keys[$id] = true;
     }
 
@@ -88,29 +60,28 @@ class Pimple implements ArrayAccess
      *
      * @throws InvalidArgumentException if the identifier is not defined
      */
-    public function offsetGet($id)
+    public function offsetGet(Tk $id)
     {
-        if (!isset($this->keys[$id])) {
+        if (!$this->keys->containsKey($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
         }
 
-        if (
-            isset($this->raw[$id])
-            || !is_object($this->values[$id])
-            || isset($this->protected[$this->values[$id]])
-            || !method_exists($this->values[$id], '__invoke')
-        ) {
+        if ($this->values->containsKey($id)) {
             return $this->values[$id];
         }
 
-        if (isset($this->factories[$this->values[$id]])) {
-            return $this->values[$id]($this);
+        $closure = $this->closures[$id];
+        if ($this->protected->contains(spl_object_hash($closure))) {
+            return $closure;
         }
 
-        $this->frozen[$id] = true;
-        $this->raw[$id] = $this->values[$id];
+        if ($this->factories->contains(spl_object_hash($closure))) {
+            return $closure($this);
+        }
 
-        return $this->values[$id] = $this->values[$id]($this);
+        $this->frozen->add($id);
+
+        return $this->values[$id] = $closure->__invoke($this);
     }
 
     /**
@@ -120,9 +91,9 @@ class Pimple implements ArrayAccess
      *
      * @return Boolean
      */
-    public function offsetExists($id)
+    public function offsetExists(Tk $id): bool
     {
-        return isset($this->keys[$id]);
+        return $this->keys->containsKey($id);
     }
 
     /**
@@ -130,15 +101,23 @@ class Pimple implements ArrayAccess
      *
      * @param string $id The unique identifier for the parameter or object
      */
-    public function offsetUnset($id)
+    public function offsetUnset(Tk $id): this
     {
-        if (isset($this->keys[$id])) {
-            if (is_object($this->values[$id])) {
-                unset($this->factories[$this->values[$id]], $this->protected[$this->values[$id]]);
-            }
-
-            unset($this->values[$id], $this->frozen[$id], $this->raw[$id], $this->keys[$id]);
+        if (!$this->keys->containsKey($id)) {
+            return;
         }
+
+        $closure = $this->closures->get($id);
+        if ($closure) {
+            $hash = spl_object_hash($closure);
+            $this->factories->remove($hash);
+            $this->protected->remove($hash);
+        }
+
+        $this->frozen->remove($id);
+        $this->closures->removeKey($id);
+        $this->values->removeKey($id);
+        $this->keys->removeKey($id);
     }
 
     /**
@@ -150,13 +129,9 @@ class Pimple implements ArrayAccess
      *
      * @throws InvalidArgumentException Service definition has to be a closure of an invokable object
      */
-    public function factory($callable)
+    public function factory(Callable $callable): Callable
     {
-        if (!is_object($callable) || !method_exists($callable, '__invoke')) {
-            throw new InvalidArgumentException('Service definition is not a Closure or invokable object.');
-        }
-
-        $this->factories->attach($callable);
+        $this->factories->add(spl_object_hash($callable));
 
         return $callable;
     }
@@ -172,13 +147,9 @@ class Pimple implements ArrayAccess
      *
      * @throws InvalidArgumentException Service definition has to be a closure of an invokable object
      */
-    public function protect($callable)
+    public function protect(Callable $callable): Callable 
     {
-        if (!is_object($callable) || !method_exists($callable, '__invoke')) {
-            throw new InvalidArgumentException('Callable is not a Closure or invokable object.');
-        }
-
-        $this->protected->attach($callable);
+        $this->protected->add(spl_object_hash($callable));
 
         return $callable;
     }
@@ -192,17 +163,13 @@ class Pimple implements ArrayAccess
      *
      * @throws InvalidArgumentException if the identifier is not defined
      */
-    public function raw($id)
+    public function raw(string $id)
     {
-        if (!isset($this->keys[$id])) {
+        if (!$this->keys->containsKey($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
         }
 
-        if (isset($this->raw[$id])) {
-            return $this->raw[$id];
-        }
-
-        return $this->values[$id];
+        return $this->closures->get($id);
     }
 
     /**
@@ -218,13 +185,13 @@ class Pimple implements ArrayAccess
      *
      * @throws InvalidArgumentException if the identifier is not defined or not a service definition
      */
-    public function extend($id, $callable)
+    public function extend(string $id, Callable $callable): Callable
     {
-        if (!isset($this->keys[$id])) {
+        if (!$this->keys->containsKey($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
         }
 
-        if (!is_object($this->values[$id]) || !method_exists($this->values[$id], '__invoke')) {
+        if (!$this->closures->containsKey($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" does not contain an object definition.', $id));
         }
 
@@ -232,15 +199,16 @@ class Pimple implements ArrayAccess
             throw new InvalidArgumentException('Extension service definition is not a Closure or invokable object.');
         }
 
-        $factory = $this->values[$id];
+        $factory = $this->closures->get($id);
 
         $extended = function ($c) use ($callable, $factory) {
             return $callable($factory($c), $c);
         };
 
-        if (isset($this->factories[$factory])) {
-            $this->factories->detach($factory);
-            $this->factories->attach($extended);
+        $hash = spl_object_hash($factory);
+        if ($this->factories->contains($hash)) {
+            $this->factories->remove(spl_object_hash($factory));
+            $this->factories->add(spl_object_hash($extended));
         }
 
         return $this[$id] = $extended;
@@ -251,8 +219,8 @@ class Pimple implements ArrayAccess
      *
      * @return array An array of value names
      */
-    public function keys()
+    public function keys(): Vector<string>
     {
-        return array_keys($this->values);
+        return $this->values->keys();
     }
 }
