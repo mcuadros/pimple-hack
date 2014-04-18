@@ -1,7 +1,7 @@
 Pimple 2.x for Hack [![Build Status](https://travis-ci.org/mcuadros/pimple-hack.png?branch=master)](https://travis-ci.org/mcuadros/cli-array-editor)
 ==============================
 
-A [Pimple](https://github.com/fabpot/Pimple) version in Hack/HHVM, just for fun!
+A [Pimple](https://github.com/fabpot/Pimple) version in Hack/HHVM, just for fun! 
 
 Requirements
 ------------
@@ -23,6 +23,12 @@ You can see [package information on Packagist.](https://packagist.org/packages/m
     }
 }
 ```
+
+
+Benchmarking
+---------
+
+Just as a learning practice, i made this port of pimple for hack, [this](https://gist.github.com/mcuadros/10937820) are the results of my little benchmarks based on 1 million of iterations, where the hack version is a 30% faster than the original PHP version.
 
 
 Tests
