@@ -1,4 +1,4 @@
-<?hh // decl
+<?hh
 
 /*
  * This file is part of Pimple.
@@ -74,9 +74,9 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
         }
 
         if (is_object($value) && is_callable($value, '__invoke')) {
-            $this->closures->add(Pair<string, mixed> {$id, $value});
+            $this->closures->add(Pair{$id, $value});
         } else {
-            $this->values->add(Pair<string, mixed> {$id, $value});
+            $this->values->add(Pair{$id, $value});
         }
 
         $this->keys->add($id);
@@ -110,7 +110,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
         $value = $closure->__invoke($this);
         if (!$this->factories->contains(spl_object_hash($closure))) {
             $this->frozen->add($id);
-            $this->values->add(Pair<string, mixed> {$id, $value});
+            $this->values->add(Pair{$id, $value});
         }
 
         return $value;
@@ -133,7 +133,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      *
      * @param string $id The unique identifier for the parameter or object
      */
-    public function offsetUnset(Tk $id): this
+    public function offsetUnset(Tk $id): void
     {
         if (!$this->keys->contains($id)) {
             return;
@@ -217,7 +217,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      *
      * @throws InvalidArgumentException if the identifier is not defined or not a service definition
      */
-    public function extend(string $id, Callable $callable): Callable
+    public function extend(string $id, Callable $callable): (function (Pimple): mixed)
     {
         if (!$this->keys->contains($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
@@ -229,17 +229,17 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
 
         $factory = $this->closures->get($id);
 
-        $extended = function ($c) use ($callable, $factory) {
-            return $callable($factory($c), $c);
-        };
-
+        $extended = $c ==> $callable->__invoke($factory($c), $c);
+     
         $hash = spl_object_hash($factory);
         if ($this->factories->contains($hash)) {
             $this->factories->remove(spl_object_hash($factory));
             $this->factories->add(spl_object_hash($extended));
         }
 
-        return $this[$id] = $extended;
+        $this->closures->add(Pair{$id, $extended});
+
+        return $extended;
     }
 
     /**
