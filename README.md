@@ -1,4 +1,4 @@
-Pimple 2.x for Hack [![Build Status](https://travis-ci.org/mcuadros/pimple-hack.png?branch=master)](https://travis-ci.org/mcuadros/cli-array-editor)
+Pimple 2.x for Hack [![Build Status](https://travis-ci.org/mcuadros/pimple-hack.png?branch=master)](https://travis-ci.org/mcuadros/pimple-hack)
 ==============================
 
 A [Pimple](https://github.com/fabpot/Pimple) version in Hack/HHVM, just for fun! 
