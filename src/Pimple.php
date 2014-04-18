@@ -67,7 +67,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      * @param  mixed            $value The value of the parameter or a closure to define an object
      * @throws RuntimeException Prevent override of a frozen service
      */
-    public function offsetSet(Tk $id, Tv $value)
+    public function offsetSet(Tk $id, Tv $value): this
     {
         if ($this->frozen->contains($id)) {
             throw new RuntimeException(sprintf('Cannot override frozen service "%s".', $id));
@@ -80,6 +80,8 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
         }
 
         $this->keys->add($id);
+
+        return $this;
     }
 
     /**
@@ -91,7 +93,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      *
      * @throws InvalidArgumentException if the identifier is not defined
      */
-    public function offsetGet(Tk $id)
+    public function offsetGet(Tk $id): Tv
     {
         if (!$this->keys->contains($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
@@ -133,7 +135,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      *
      * @param string $id The unique identifier for the parameter or object
      */
-    public function offsetUnset(Tk $id): void
+    public function offsetUnset(Tk $id): this
     {
         if (!$this->keys->contains($id)) {
             return;
@@ -150,6 +152,8 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
         $this->values->removeKey($id);
         $this->frozen->remove($id);
         $this->keys->remove($id);
+
+        return $this;
     }
 
     /**
