@@ -25,20 +25,23 @@
  * THE SOFTWARE.
  */
 
+type Factory = (function (Pimple): mixed);
+type Extendable = (function (mixed, Pimple): mixed);
+
 /**
  * Pimple main class.
  *
  * @package pimple
- * @author  Fabien Potencier
+ * @author  Máximo Cuadros
  */
-class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
+class Pimple implements ArrayAccess<string, mixed>
 {
-    private Set<closure> $factories = Set {};
-    private Set<closure> $protected = Set {};
+    private Set<Factory> $factories = Set {};
+    private Set<Factory> $protected = Set {};
     private Set<string> $frozen = Set {};
     private Set<string> $keys = Set {};
     private Map<string, mixed> $values = Map {};
-    private Map<string, closure> $closures = Map {};
+    private Map<string, Factory> $closures = Map {};
 
     /**
      * Instantiate the container.
@@ -47,7 +50,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      *
      * @param array $values The parameters or objects.
      */
-    public function __construct(array $values = [])
+    public function __construct(array<string, mixed> $values = [])
     {
         foreach ($values as $key => $value) {
             $this->offsetSet($key, $value);
@@ -67,7 +70,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      * @param  mixed            $value The value of the parameter or a closure to define an object
      * @throws RuntimeException Prevent override of a frozen service
      */
-    public function offsetSet(Tk $id, Tv $value): this
+    public function offsetSet($id, $value): this
     {
         if ($this->frozen->contains($id)) {
             throw new RuntimeException(sprintf('Cannot override frozen service "%s".', $id));
@@ -93,7 +96,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      *
      * @throws InvalidArgumentException if the identifier is not defined
      */
-    public function offsetGet(Tk $id): Tv
+    public function offsetGet($id): mixed
     {
         if (!$this->keys->contains($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
@@ -103,13 +106,12 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
            return $this->values->get($id);
         }
 
-        $closure = $this->closures->get($id);
+        $closure = $this->closures->at($id);
         if ($this->protected->contains(spl_object_hash($closure))) {
             return $closure;
         }
 
-
-        $value = $closure->__invoke($this);
+        $value = $closure($this);
         if (!$this->factories->contains(spl_object_hash($closure))) {
             $this->frozen->add($id);
             $this->values->add(Pair{$id, $value});
@@ -125,7 +127,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      *
      * @return Boolean
      */
-    public function offsetExists(Tk $id): bool
+    public function offsetExists($id): bool
     {
         return $this->keys->contains($id);
     }
@@ -135,10 +137,10 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      *
      * @param string $id The unique identifier for the parameter or object
      */
-    public function offsetUnset(Tk $id): this
+    public function offsetUnset($id): this
     {
         if (!$this->keys->contains($id)) {
-            return;
+            return $this;
         }
 
         $closure = $this->closures->get($id);
@@ -165,7 +167,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      *
      * @throws InvalidArgumentException Service definition has to be a closure of an invokable object
      */
-    public function factory(Callable $callable): Callable
+    public function factory(Factory $callable): Factory
     {
         $this->factories->add(spl_object_hash($callable));
 
@@ -183,7 +185,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      *
      * @throws InvalidArgumentException Service definition has to be a closure of an invokable object
      */
-    public function protect(Callable $callable): Callable 
+    public function protect(Factory $callable): Factory 
     {
         $this->protected->add(spl_object_hash($callable));
 
@@ -221,7 +223,7 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
      *
      * @throws InvalidArgumentException if the identifier is not defined or not a service definition
      */
-    public function extend(string $id, Callable $callable): (function (Pimple): mixed)
+    public function extend(string $id, Extendable $callable): Factory
     {
         if (!$this->keys->contains($id)) {
             throw new InvalidArgumentException(sprintf('Identifier "%s" is not defined.', $id));
@@ -231,9 +233,8 @@ class Pimple<Tk, Tv> implements ArrayAccess<Tk, Tv>
             throw new InvalidArgumentException(sprintf('Identifier "%s" does not contain an object definition.', $id));
         }
 
-        $factory = $this->closures->get($id);
-
-        $extended = $c ==> $callable->__invoke($factory($c), $c);
+        $factory = $this->closures->at($id);
+        $extended = $c ==> $callable($factory($c), $c);
      
         $hash = spl_object_hash($factory);
         if ($this->factories->contains($hash)) {
